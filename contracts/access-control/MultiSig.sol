@@ -8,6 +8,7 @@ contract MultiSig {
     address[] public owners;
     mapping(address => bool) public isOwner;
 
+    // The number of confirmations required to execute a transaction
     uint256 public requiredConfirmations;
 
     // Transactions to be executed
@@ -19,24 +20,23 @@ contract MultiSig {
         uint256 numConfirmations;
     }
 
-    // mapping from tx index => owner => bool
-    mapping(uint256 => mapping(address => bool)) public isConfirmed;
+    mapping(uint256 txIndex => mapping(address owner => bool)) public isConfirmed;
 
     Transaction[] public transactions;
 
     // ********** EVENTS & ERRORS ********** //
 
     event Deposit(address indexed sender, uint256 amount, uint256 balance);
-    event SubmitTransaction(
+    event TransactionSubmitted(
         address indexed owner,
         uint256 indexed txIndex,
         address indexed to,
         uint256 value,
         bytes data
     );
-    event ConfirmTransaction(address indexed owner, uint256 indexed txIndex);
-    event RevokeConfirmation(address indexed owner, uint256 indexed txIndex);
-    event ExecuteTransaction(address indexed owner, uint256 indexed txIndex);
+    event TransactionConfirmed(address indexed owner, uint256 indexed txIndex);
+    event TransactionExecuted(address indexed owner, uint256 indexed txIndex);
+    event TransactionRevoked(address indexed owner, uint256 indexed txIndex);
 
     // ********** MODIFIERS ********** //
 
@@ -97,6 +97,20 @@ contract MultiSig {
         return transactions.length;
     }
 
+    function getTransaction(
+        uint256 _txIndex
+    ) public view returns (address to, uint256 value, bytes memory data, bool executed, uint256 numConfirmations) {
+        Transaction memory transaction = transactions[_txIndex];
+
+        return (
+            transaction.to,
+            transaction.value,
+            transaction.data,
+            transaction.executed,
+            transaction.numConfirmations
+        );
+    }
+
     // ********** MAIN FUCTIONS ********** //
 
     function submitTransaction(address _to, uint256 _value, bytes memory _data) public onlyOwner {
@@ -104,7 +118,7 @@ contract MultiSig {
 
         transactions.push(Transaction({to: _to, value: _value, data: _data, executed: false, numConfirmations: 0}));
 
-        emit SubmitTransaction(msg.sender, txIndex, _to, _value, _data);
+        emit TransactionSubmitted(msg.sender, txIndex, _to, _value, _data);
     }
 
     function confirmTransaction(uint256 _txIndex) public notExecutedTx(_txIndex) onlyOwner {
@@ -114,7 +128,7 @@ contract MultiSig {
         transaction.numConfirmations += 1;
         isConfirmed[_txIndex][msg.sender] = true;
 
-        emit ConfirmTransaction(msg.sender, _txIndex);
+        emit TransactionConfirmed(msg.sender, _txIndex);
     }
 
     function executeTransaction(uint256 _txIndex) public notExecutedTx(_txIndex) onlyOwner {
@@ -127,7 +141,7 @@ contract MultiSig {
         (bool success, ) = transaction.to.call{value: transaction.value}(transaction.data);
         require(success, "tx failed");
 
-        emit ExecuteTransaction(msg.sender, _txIndex);
+        emit TransactionExecuted(msg.sender, _txIndex);
     }
 
     function revokeConfirmation(uint256 _txIndex) public onlyOwner notExecutedTx(_txIndex) {
@@ -138,6 +152,10 @@ contract MultiSig {
         transaction.numConfirmations -= 1;
         isConfirmed[_txIndex][msg.sender] = false;
 
-        emit RevokeConfirmation(msg.sender, _txIndex);
+        emit TransactionRevoked(msg.sender, _txIndex);
+    }
+
+    receive() external payable {
+        emit Deposit(msg.sender, msg.value, address(this).balance);
     }
 }

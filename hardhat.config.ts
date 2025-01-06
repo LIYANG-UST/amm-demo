@@ -9,7 +9,8 @@ import "./tasks/lock";
 
 // Run 'npx hardhat vars setup' to see the list of variables that need to be set
 
-const mnemonic: string = vars.get("SEPOLIA_DEV_PK");
+const dev_pk: string = vars.get("SEPOLIA_DEV_PK");
+const mnemonic: string = vars.get("MNEMONIC");
 const infuraApiKey: string = vars.get("INFURA_API_KEY");
 
 const chainIds = {

@@ -3,7 +3,8 @@
 pragma solidity >=0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {Math} from "./Libraries/Math.sol";
+import {IFactory} from "./interfaces/IFactory.sol";
+import {Math} from "./libraries/Math.sol";
 
 /**
  * @title Pair
@@ -17,11 +18,12 @@ contract Pair {
     // Minimum liquidity locked
     uint256 public constant MINIMUM_LIQUIDITY = 10 ** 3;
 
-    // Token0 and token1 in this pair
-    IERC20 public immutable token0;
-    IERC20 public immutable token1;
-
     // ********** STATE VARIABLES ********** //
+    address public factory;
+
+    // Token0 and token1 in this pair
+    IERC20 public token0;
+    IERC20 public token1;
 
     // Token amount inside this pool
     uint256 public reserve0;
@@ -38,15 +40,43 @@ contract Pair {
     mapping(address account => uint256 balance) balanceOf;
 
     // ********** CONSTRUCTOR ********** //
-    constructor(address _token0, address _token1, uint256 _fee) {
+    constructor() {
+        factory = msg.sender;
+    }
+
+    function initialize(address _token0, address _token1, uint256 _fee) external {
+        require(msg.sender == factory, "Pair: forbidden");
+        require(_fee <= 1000, "Pair: invalid fee");
+
         token0 = IERC20(_token0);
         token1 = IERC20(_token1);
-
         fee = _fee;
     }
 
+    // ********** MODIFIERS ********** //
+
+    modifier notLocked() {
+        require(!isPairLocked(), "Pair: locked");
+        _;
+    }
+
+    modifier onlyFactory() {
+        require(msg.sender == factory, "Pair: forbidden");
+        _;
+    }
+
+    // ********** VIEW FUNCTIONS ********** //
+
+    function getReserves() external view returns (uint256, uint256) {
+        return (reserve0, reserve1);
+    }
+
+    function isPairLocked() public view returns (bool) {
+        return IFactory(factory).pairLocked(address(this));
+    }
+
     // ********** MAIN FUNCTIONS ********** //
-    function swap(address _tokenIn, uint256 _amountIn) external returns (uint256 amountOut) {
+    function swap(address _tokenIn, uint256 _amountIn) external notLocked returns (uint256 amountOut) {
         require(_tokenIn == address(token0) || _tokenIn == address(token1), "Pair: invalid token");
         require(_amountIn > 0, "Pair: invalid amount");
 
@@ -74,7 +104,7 @@ contract Pair {
         return amountOut;
     }
 
-    function addLiquidity(uint256 _amount0, uint256 _amount1) external returns (uint256 liquidity) {
+    function addLiquidity(uint256 _amount0, uint256 _amount1) external notLocked returns (uint256 liquidity) {
         require(_amount0 > 0 && _amount1 > 0, "Pair: invalid amount");
 
         token0.transferFrom(msg.sender, address(this), _amount0);
@@ -96,14 +126,14 @@ contract Pair {
         reserve1 = token1.balanceOf(address(this));
     }
 
-    function removeLiquidity(uint256 _liquidity) external returns (uint256 amount0, uint256 amount1) {
+    function removeLiquidity(uint256 _liquidity) external notLocked returns (uint256 amount0, uint256 amount1) {
         require(_liquidity > 0 && totalSupply > 0, "Pair: invalid liquidity");
 
         uint256 currentBalance0 = token0.balanceOf(address(this));
         uint256 currentBalance1 = token1.balanceOf(address(this));
 
-        uint256 amount0 = (_liquidity * currentBalance0) / totalSupply;
-        uint256 amount1 = (_liquidity * currentBalance1) / totalSupply;
+        amount0 = (_liquidity * currentBalance0) / totalSupply;
+        amount1 = (_liquidity * currentBalance1) / totalSupply;
 
         require(amount0 > 0 && amount1 > 0, "Pair: invalid amount");
 
@@ -114,12 +144,10 @@ contract Pair {
 
         reserve0 = token0.balanceOf(address(this));
         reserve1 = token1.balanceOf(address(this));
-
-        return (amount0, amount1);
     }
 
-    function setFee(uint256 _fee) external {
-        require(_fee <= 1000, "Pair: invalid fee");
+    function setFee(uint256 _fee) external onlyFactory {
+        // require(_fee <= 1000, "Pair: invalid fee");
         fee = _fee;
     }
 
