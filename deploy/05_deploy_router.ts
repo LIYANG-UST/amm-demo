@@ -2,14 +2,17 @@ import { network } from "hardhat";
 import { DeployFunction } from "hardhat-deploy/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
-import { readAddressList, storeAddressList } from "../scripts/contractAddress";
+import { readAddressList } from "../scripts/contractAddress";
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployer } = await hre.getNamedAccounts();
   const { deploy } = hre.deployments;
-  const addressList = readAddressList();
 
-  const factory = await deploy("Factory", {
+  const addressList = readAddressList();
+  const factoryAddress = addressList[network.name].Factory;
+  const wethAddress = addressList[network.name].WETH;
+
+  const router = await deploy("Router", {
     from: deployer,
     args: [],
     log: true,
@@ -19,17 +22,14 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
       execute: {
         init: {
           methodName: "initialize",
-          args: [deployer],
+          args: [factoryAddress, wethAddress],
         },
       },
     },
   });
 
-  console.log(`--[[${network}]]-- Factory is deployed to: ${factory.address}`);
-
-  addressList[network.name].Factory = factory.address;
-  storeAddressList(addressList);
+  console.log(`--[[${network}]]-- Router is deployed to: ${router.address}`);
 };
 export default func;
-func.id = "deploy_factory"; // id required to prevent reexecution
-func.tags = ["Factory"];
+func.id = "deploy_router"; // id required to prevent reexecution
+func.tags = ["Router"];
